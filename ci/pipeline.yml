@@ -1,0 +1,65 @@
+resources:
+- name: julienlevasseur/jekyll
+  type: git
+  source:
+    uri: https://github.com/julienlevasseur/julienlevasseur-jekyll-docker.git
+    branch: master
+
+- name: julienlevasseur/jekyll-docker-image
+  type: docker-image
+  source:
+    repository: julienlevasseur/jekyll
+    username: {{dockerhub-username}}
+    password: {{dockerhub-password}}
+
+jobs:
+- name: build-julienlevasseur/jekyll
+  plan:
+  - get: julienlevasseur/jekyll
+  - task: build-workspace
+    config:
+      platform: linux
+      image_resource:
+        type: docker-image
+        source:
+          repository: alpine
+
+      inputs:
+      - name: julienlevasseur/jekyll
+
+      run:
+        path: /bin/sh
+        args:
+        - -c
+        - |
+          ls -l julienlevasseur/jekyll
+
+  - put: julienlevasseur/jekyll-docker-image
+    params:
+      build: julienlevasseur/jekyll
+
+- name: test
+  plan:
+  - get: julienlevasseur/jekyll-docker-image
+    passed: [build-julienlevasseur/jekyll]
+    trigger: true
+  - get: julienlevasseur/jekyll
+    passed: [build-julienlevasseur/jekyll]
+  - task: run-tests
+    image: julienlevasseur/jekyll-docker-image
+    config:
+      platform: linux
+      inputs:
+      - name: julienlevasseur/jekyll
+      run:
+        dir: /
+        path: /bin/sh
+        args:
+        - -c
+        - |
+          apk add ruby ruby-dev zlib-dev zlib build-base libffi-dev
+          gem install --no-document html-proofer
+          git clone https://github.com/julienlevasseur/jekyll-theme-basically-basic.git
+          cd jekyll-theme-basically-basic
+          jekyll serve --baseurl "" --detach
+          htmlproofer ./_site --disable-external --empty-alt-ignore
